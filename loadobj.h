@@ -43,6 +43,8 @@ typedef struct {
 void loadOBJ(LoadOBJMesh *mesh, const char *string);
 void loadOBJDestroyMesh(LoadOBJMesh *mesh);
 
+void loadOBJResolveNegativeIndices(LoadOBJMesh *mesh);
+
 #ifdef LOADOBJ_IMPLEMENTATION
 
 #include <stdlib.h> // realloc, free, strtof, strtoll
@@ -204,6 +206,10 @@ void loadOBJ(LoadOBJMesh *mesh, const char *string)
 
 	mesh->faceCount = faces.count;
 	mesh->faces = (LoadOBJFace*) realloc(faces.data, mesh->faceCount * sizeof(LoadOBJFace));
+
+#ifndef LOADOBJ_NO_NEGATIVE_INDICES
+	loadOBJResolveNegativeIndices(mesh);
+#endif
 }
 
 void loadOBJDestroyMesh(LoadOBJMesh *mesh)
@@ -216,6 +222,33 @@ void loadOBJDestroyMesh(LoadOBJMesh *mesh)
 		free(mesh->faces[i].indices);
 
 	free(mesh->faces);
+}
+
+void loadOBJResolveNegativeIndices(LoadOBJMesh *mesh)
+{
+	const size_t vertexCounts[3] = {
+			mesh->positionCount,
+			mesh->texCoordCount,
+			mesh->normalCount,
+	};
+
+	for (size_t i = 0; i < mesh->faceCount; ++i)
+	{
+		for (size_t j = 0; j < mesh->faces[i].indexCount; ++j)
+		{
+			long long *indices = (long long*) (mesh->faces[i].indices + j);
+
+			for (int k = 0; k < 3; ++k)
+			{
+				if (indices[k] > 0)
+					indices[k] -= 1;
+				else if (indices[k] < 0)
+					indices[k] = vertexCounts[k] + indices[k];
+				else
+					indices[k] = -1;
+			}
+		}
+	}
 }
 
 #endif
