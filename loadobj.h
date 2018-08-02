@@ -40,10 +40,24 @@ typedef struct {
 	size_t faceCount;
 } LoadOBJMesh;
 
+typedef struct {
+	float x, y, z;
+	float u, v;
+	float nx, ny, nz;
+} LoadOBJTriangleVertex;
+
+typedef struct {
+	LoadOBJTriangleVertex *vertices;
+	size_t vertexCount;
+} LoadOBJTriangleMesh;
+
 void loadOBJ(LoadOBJMesh *mesh, const char *string);
 void loadOBJDestroyMesh(LoadOBJMesh *mesh);
 
 void loadOBJResolveNegativeIndices(LoadOBJMesh *mesh);
+
+void loadOBJTriangulate(LoadOBJTriangleMesh *trimesh, const LoadOBJMesh *mesh);
+void loadOBJDestroyTriangleMesh(LoadOBJTriangleMesh *trimesh);
 
 #ifdef LOADOBJ_IMPLEMENTATION
 
@@ -249,6 +263,53 @@ void loadOBJResolveNegativeIndices(LoadOBJMesh *mesh)
 			}
 		}
 	}
+}
+
+void loadOBJTriangulate(LoadOBJTriangleMesh *trimesh, const LoadOBJMesh *mesh)
+{
+	_LOADOBJ_ARRAY(LoadOBJTriangleVertex) vertices;
+
+	memset(&vertices, 0, sizeof(vertices));
+
+	for (size_t i = 0; i < mesh->faceCount; ++i)
+	{
+		const LoadOBJFace *face = mesh->faces + i;
+
+		while ((vertices.count + (face->indexCount - 2) * 3) >= vertices.capacity)
+			_LOADOBJ_ARRAY_GROW(LoadOBJTriangleVertex, vertices);
+
+		for (size_t j = 2; j < face->indexCount; ++j)
+		{
+			const size_t vertexIndices[3] = { 0, j - 1, j };
+
+			for (int k = 0; k < 3; ++k)
+			{
+				const LoadOBJVertexIndex *vertexIndex = face->indices + vertexIndices[k];
+
+				memcpy(&vertices.data[vertices.count].x, mesh->positions + vertexIndex->v, sizeof(LoadOBJVertexPosition));
+
+				if (vertexIndex->vt != -1)
+					memcpy(&vertices.data[vertices.count].u, mesh->texCoords + vertexIndex->vt, sizeof(LoadOBJVertexTexCoord));
+				else
+					memset(&vertices.data[vertices.count].u, 0, sizeof(LoadOBJVertexTexCoord));
+
+				if (vertexIndex->vn != -1)
+					memcpy(&vertices.data[vertices.count].nx, mesh->normals + vertexIndex->vn, sizeof(LoadOBJVertexNormal));
+				else
+					memset(&vertices.data[vertices.count].nx, 0, sizeof(LoadOBJVertexNormal));
+
+				++vertices.count;
+			}
+		}
+	}
+
+	trimesh->vertexCount = vertices.count;
+	trimesh->vertices = (LoadOBJTriangleVertex*) realloc(vertices.data, trimesh->vertexCount * sizeof(LoadOBJTriangleVertex));
+}
+
+void loadOBJDestroyTriangleMesh(LoadOBJTriangleMesh *trimesh)
+{
+	free(trimesh->vertices);
 }
 
 #endif
